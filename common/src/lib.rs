@@ -635,12 +635,11 @@ impl GyroflowPluginBaseInstance {
                             let r = ((360 - md.rotation) % 360) as f64;
                             let video_size = stab.params.read().size;
                             stab.params.write().video_rotation = r;
+                            params.set_f64(Params::InputRotation, r)?;
                             if Self::nle_handles_rotation(out_size, video_size, r) {
                                 stab.set_frame_rotation(r);
-                                params.set_f64(Params::InputRotation, 0.0)?;
                             } else {
                                 stab.set_frame_rotation(0.0);
-                                params.set_f64(Params::InputRotation, r)?;
                             }
                         }
                         params.set_string(Params::LoadedProject, &filesystem::get_filename(&filesystem::path_to_url(&path)))?;
@@ -699,12 +698,11 @@ impl GyroflowPluginBaseInstance {
                             let r = ((360 - video_md.rotation) % 360) as f64;
                             let video_size = stab.params.read().size;
                             stab.params.write().video_rotation = r;
+                            params.set_f64(Params::InputRotation, r)?;
                             if Self::nle_handles_rotation(out_size, video_size, r) {
                                 stab.set_frame_rotation(r);
-                                params.set_f64(Params::InputRotation, 0.0)?;
                             } else {
                                 stab.set_frame_rotation(0.0);
-                                params.set_f64(Params::InputRotation, r)?;
                             }
                         }
                     }
