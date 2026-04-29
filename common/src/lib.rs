@@ -438,6 +438,14 @@ impl Default for GyroflowPluginBaseInstance {
 }
 
 impl GyroflowPluginBaseInstance {
+    fn nle_handles_rotation(out_size: (usize, usize), video_size: (usize, usize), video_rotation: f64) -> bool {
+        let host_is_portrait = out_size.1 > out_size.0;
+        let video_is_landscape = video_size.0 > video_size.1;
+        let r = ((video_rotation % 360.0) + 360.0) % 360.0;
+        let rotation_is_90_270 = (r - 90.0).abs() < 0.01 || (r - 270.0).abs() < 0.01;
+        host_is_portrait && video_is_landscape && rotation_is_90_270
+    }
+
     pub fn update_loaded_state(&mut self, params: &mut dyn GyroflowPluginParams, loaded: bool) {
         let _ = params.set_enabled(Params::Fov, loaded);
         let _ = params.set_enabled(Params::Smoothness, loaded);
@@ -625,8 +633,15 @@ impl GyroflowPluginBaseInstance {
                         }
                         if md.rotation != 0 && self.reload_values_from_project {
                             let r = ((360 - md.rotation) % 360) as f64;
-                            params.set_f64(Params::InputRotation, r)?;
+                            let video_size = stab.params.read().size;
                             stab.params.write().video_rotation = r;
+                            if Self::nle_handles_rotation(out_size, video_size, r) {
+                                stab.set_frame_rotation(r);
+                                params.set_f64(Params::InputRotation, 0.0)?;
+                            } else {
+                                stab.set_frame_rotation(0.0);
+                                params.set_f64(Params::InputRotation, r)?;
+                            }
                         }
                         params.set_string(Params::LoadedProject, &filesystem::get_filename(&filesystem::path_to_url(&path)))?;
                         if !stab.gyro.read().file_metadata.read().has_accurate_timestamps && open_gyroflow_if_no_data {
@@ -682,8 +697,15 @@ impl GyroflowPluginBaseInstance {
                     if let Ok(video_md) = gyroflow_core::util::get_video_metadata(file.get_file(), filesize, &url) {
                         if video_md.rotation != 0 && self.reload_values_from_project {
                             let r = ((360 - video_md.rotation) % 360) as f64;
-                            params.set_f64(Params::InputRotation, r)?;
+                            let video_size = stab.params.read().size;
                             stab.params.write().video_rotation = r;
+                            if Self::nle_handles_rotation(out_size, video_size, r) {
+                                stab.set_frame_rotation(r);
+                                params.set_f64(Params::InputRotation, 0.0)?;
+                            } else {
+                                stab.set_frame_rotation(0.0);
+                                params.set_f64(Params::InputRotation, r)?;
+                            }
                         }
                     }
                 }

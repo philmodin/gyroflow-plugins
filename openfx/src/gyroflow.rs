@@ -307,7 +307,11 @@ impl Execute for GyroflowPlugin {
                     out_rect = None;
                 }
 
-                let input_rotation = instance_data.params.get_f64_at_time(Params::InputRotation, TimeType::Frame(time)).ok().map(|x| x as f32);
+                let input_rotation = if stab.params.read().frame_rotation != 0.0 {
+                    None
+                } else {
+                    instance_data.params.get_f64_at_time(Params::InputRotation, TimeType::Frame(time)).ok().map(|x| x as f32)
+                };
 
                 // log::debug!("src_size: {src_size:?} | src_rect: {src_rect:?}");
                 // log::debug!("out_size: {out_size:?} | out_rect: {out_rect:?}");
