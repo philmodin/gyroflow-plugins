@@ -846,12 +846,12 @@ impl GyroflowPluginBaseInstance {
             }
 
             // Ensure frame_rotation is set on every load path (fresh, cached, embedded, .gyroflow).
-            // Earlier code may have set it during load_video_file or get_video_metadata, but those
-            // paths are conditional (always_set_input_rotation, reload_values_from_project, cache hits).
-            // This catch-all uses the current video_rotation and compares host vs video dimensions.
+            // Read video_rotation from the OFX Rotation parameter (always restored by the host on
+            // project load) rather than stab.params.video_rotation, which is only set when
+            // reload_values_from_project is true.
             {
+                let video_rotation = params.get_f64(Params::Rotation).unwrap_or(stab.params.read().video_rotation);
                 let video_size = stab.params.read().size;
-                let video_rotation = stab.params.read().video_rotation;
                 if Self::nle_handles_rotation(out_size, video_size, video_rotation) {
                     stab.set_frame_rotation(video_rotation);
                 } else {
