@@ -474,6 +474,7 @@ impl Execute for GyroflowPlugin {
                     },
                     plugin: GyroflowPluginBaseInstance {
                         managers:                    LruCache::new(std::num::NonZeroUsize::new(20).unwrap()),
+                        cached_stab:                 None,
                         original_output_size:        (0, 0),
                         original_video_size:         (0, 0),
                         timeline_size:               (0, 0),

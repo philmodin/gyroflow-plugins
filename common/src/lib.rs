@@ -375,6 +375,13 @@ pub struct GyroflowPluginBaseInstance {
     #[serde(skip)]
     pub managers: LruCache<String, Arc<StabilizationManager>>,
 
+    /// Fast path for the per-frame playback case: skips the global Mutex
+    /// and `format!` key build in `stab_manager()`. Keyed by
+    /// (project_path, disable_stretch, instance_id). Cleared by `clear_stab`
+    /// and the Interpolation handler.
+    #[serde(skip)]
+    pub cached_stab: Option<(String, bool, String, Arc<StabilizationManager>)>,
+
     pub reload_values_from_project: bool,
 
     pub original_video_size: (usize, usize),
@@ -395,6 +402,7 @@ impl Clone for GyroflowPluginBaseInstance {
     fn clone(&self) -> Self {
         Self {
             managers:                       self.managers.clone(),
+            cached_stab:                    self.cached_stab.clone(),
             original_output_size:           self.original_output_size,
             original_video_size:            self.original_video_size,
             timeline_size:                  self.timeline_size,
@@ -416,6 +424,7 @@ impl Default for GyroflowPluginBaseInstance {
     fn default() -> Self {
         Self {
             managers:                       LruCache::new(std::num::NonZeroUsize::new(20).unwrap()),
+            cached_stab:                    None,
             original_output_size:           (0, 0),
             original_video_size:            (0, 0),
             timeline_size:                  (0, 0),
@@ -544,6 +553,14 @@ impl GyroflowPluginBaseInstance {
             return Err("Path is empty".into());
         }
 
+        // Per-frame playback fast path: skip the contended global Mutex, the
+        // `format!` String, and `set_keyframe_provider`'s write-lock + Box.
+        if let Some((cached_path, cached_ds, cached_id, cached_stab)) = &self.cached_stab {
+            if cached_path == &path && *cached_ds == disable_stretch && cached_id == &instance_id {
+                return Ok(cached_stab.clone());
+            }
+        }
+
         if self.timeline_size == (0, 0) {
             self.timeline_size = out_size;
         }
@@ -555,6 +572,9 @@ impl GyroflowPluginBaseInstance {
             if !self.managers.contains(&key) {
                 self.managers.put(key.to_owned(), stab.clone());
             }
+            // Closure captures the keyframable_params Arc, so re-install is
+            // not needed on cache hits — done once here, then short-circuited
+            // by the per-instance fast-path on subsequent frames.
             self.set_keyframe_provider(&stab);
             stab
         } else {
@@ -850,10 +870,15 @@ impl GyroflowPluginBaseInstance {
             stab
         };
 
+        self.cached_stab = Some((path, disable_stretch, instance_id, stab.clone()));
+
         Ok(stab)
     }
 
     pub fn clear_stab(&mut self, manager_cache: &Mutex<LruCache<String, Arc<StabilizationManager>>>) {
+        // ReloadProject reuses the same key but expects fresh data, so the
+        // fast-path Arc must be dropped even when the key is unchanged.
+        self.cached_stab = None;
         let local_keys = self.managers.iter().map(|x| x.0.clone()).collect::<Vec<_>>();
         self.managers.clear();
 
@@ -1051,6 +1076,7 @@ impl GyroflowPluginBaseInstance {
                 }
             }
             if param == Params::Interpolation {
+                self.cached_stab = None;
                 self.managers.clear();
                 manager_cache.lock().clear();
             }
