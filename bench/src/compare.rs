@@ -13,39 +13,14 @@ pub fn load(path: &Path) -> Result<BenchResult> {
 
 /// Resolve a CLI argument to a result file path. The argument may be:
 ///   - an absolute or relative path that exists on disk;
-///   - a label or filename substring that uniquely identifies a file in `dir`;
-///   - a label that matches multiple files — picks the newest by mtime.
+///   - a run name (looked up as `<dir>/<name>.bench.json`).
 pub fn resolve(arg: &str, dir: &Path) -> Result<PathBuf> {
     let direct = PathBuf::from(arg);
     if direct.exists() { return Ok(direct); }
-
-    if !dir.exists() {
-        return Err(anyhow!("'{}' is not a path and {} does not exist", arg, dir.display()));
-    }
-    let json_files: Vec<PathBuf> = std::fs::read_dir(dir)?
-        .filter_map(|e| e.ok().map(|e| e.path()))
-        .filter(|p| p.extension().map(|x| x == "json").unwrap_or(false))
-        .collect();
-    // Prefer files whose stored label equals `arg` exactly; fall back to filename substring.
-    let exact: Vec<PathBuf> = json_files.iter()
-        .filter(|p| load(p).ok().map(|r| r.label == arg).unwrap_or(false))
-        .cloned().collect();
-    let mut matches = if !exact.is_empty() { exact } else {
-        json_files.iter()
-            .filter(|p| p.file_name().and_then(|n| n.to_str()).map(|n| n.contains(arg)).unwrap_or(false))
-            .cloned().collect::<Vec<_>>()
-    };
-    if matches.is_empty() {
-        return Err(anyhow!("no result file in {} matches '{}'", dir.display(), arg));
-    }
-    if matches.len() > 1 {
-        matches.sort_by_key(|p| std::fs::metadata(p).and_then(|m| m.modified()).ok());
-        let chosen = matches.last().unwrap().clone();
-        eprintln!("note: '{}' matched {} files; using newest: {}",
-            arg, matches.len(), chosen.file_name().unwrap().to_string_lossy());
-        return Ok(chosen);
-    }
-    Ok(matches.pop().unwrap())
+    let by_name = dir.join(format!("{arg}.bench.json"));
+    if by_name.exists() { return Ok(by_name); }
+    Err(anyhow!("no result file matches '{}' (looked at {} and {})",
+        arg, direct.display(), by_name.display()))
 }
 
 pub fn compare(baseline: &str, candidate: &str, dir: &Path, threshold_pct: f64) -> Result<()> {
@@ -166,9 +141,9 @@ pub fn list(dir: &Path) -> Result<()> {
     for e in entries {
         let path = e.path();
         match load(&path) {
-            Ok(r) => println!("{}  label={:<20} plugin={} core={}",
+            Ok(r) => println!("{}  name={:<20} plugin={} core={}",
                 path.file_name().unwrap().to_string_lossy(),
-                r.label,
+                r.name,
                 short(&r.git.plugin_rev),
                 short(&r.git.core_rev)),
             Err(err) => println!("{}  (parse error: {err})", path.display()),
