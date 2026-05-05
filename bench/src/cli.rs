@@ -12,25 +12,25 @@ pub struct Cli {
 pub enum Cmd {
     /// Run a benchmark and write a JSON result file.
     Run(RunArgs),
-    /// Compare two result files cell-by-cell.
+    /// Compare two saved runs cell-by-cell.
     Compare(CompareArgs),
-    /// List result files in a directory.
+    /// List saved runs.
     List(ListArgs),
 }
 
 #[derive(clap::Args, Debug)]
 pub struct RunArgs {
+    /// Run name (required, must be unique). Result file: <name>.bench.json
+    #[arg(long)]
+    pub name: String,
+
     /// Path to the .gyroflow project file.
     #[arg(long)]
     pub project: PathBuf,
 
-    /// Override the project's input + output frame width.
+    /// Override the project's frame size, format WxH (applies to input + output).
     #[arg(long)]
-    pub width: Option<usize>,
-
-    /// Override the project's input + output frame height.
-    #[arg(long)]
-    pub height: Option<usize>,
+    pub resolution: Option<String>,
 
     /// Pixel format(s); comma-separated, or "all".
     #[arg(long, value_delimiter = ',', default_values_t = vec![PixelFormatArg::Rgba8])]
@@ -48,32 +48,30 @@ pub struct RunArgs {
     #[arg(long, default_value_t = 3)]
     pub iterations: usize,
 
-    /// Backend(s); comma-separated, or "all".
-    #[arg(long, value_delimiter = ',', default_values_t = vec![BackendArg::All])]
+    /// Backend(s); comma-separated, or "all". Default: GPU backends only (cpu is skipped
+    /// because it is the slow path). Pass `--backend cpu` (or `--backend all`) to include it.
+    #[arg(long, value_delimiter = ',')]
     pub backend: Vec<BackendArg>,
 
     /// Optional path to a video file to decode via ffmpeg (rgba8 only).
     #[arg(long)]
     pub video: Option<PathBuf>,
 
-    /// Optional human-readable label for this run.
-    #[arg(long, default_value = "")]
-    pub label: String,
-
-    /// Output directory for the result JSON.
-    #[arg(long, default_value = "bench/results")]
-    pub output: PathBuf,
+    /// Output directory for the result JSON (default: <gyroflow data dir>/benchmarks).
+    #[arg(long)]
+    pub output: Option<PathBuf>,
 }
 
 #[derive(clap::Args, Debug)]
 pub struct CompareArgs {
-    /// Path to a result file, or a label / filename substring to look up under --dir.
+    /// Path to a result file, or a name to look up under --dir.
     pub baseline: String,
-    /// Path to a result file, or a label / filename substring to look up under --dir.
+    /// Path to a result file, or a name to look up under --dir.
     pub candidate: String,
     /// Directory to search when args aren't absolute paths.
-    #[arg(long, default_value = "bench/results")]
-    pub dir: PathBuf,
+    /// Default: <gyroflow data dir>/benchmarks.
+    #[arg(long)]
+    pub dir: Option<PathBuf>,
     /// Regression threshold percent.
     #[arg(long, default_value_t = 5.0)]
     pub threshold: f64,
@@ -81,8 +79,8 @@ pub struct CompareArgs {
 
 #[derive(clap::Args, Debug)]
 pub struct ListArgs {
-    #[arg(default_value = "bench/results")]
-    pub dir: PathBuf,
+    /// Directory to list. Default: <gyroflow data dir>/benchmarks.
+    pub dir: Option<PathBuf>,
 }
 
 #[derive(Copy, Clone, Debug, ValueEnum, PartialEq, Eq, Hash)]

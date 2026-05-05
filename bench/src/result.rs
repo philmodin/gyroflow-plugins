@@ -6,7 +6,7 @@ pub const SCHEMA_VERSION: u32 = 1;
 pub struct BenchResult {
     pub schema_version: u32,
     pub timestamp: String,
-    pub label: String,
+    pub name: String,
     pub host: HostInfo,
     pub git: GitInfo,
     pub config: RunConfig,

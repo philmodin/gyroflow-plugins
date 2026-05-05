@@ -5,22 +5,48 @@ mod runner;
 mod source;
 mod sysinfo;
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use clap::Parser;
+use std::path::PathBuf;
 
 use crate::cli::{Cli, Cmd};
 use crate::result::{BenchResult, RunConfig, SCHEMA_VERSION};
+
+/// Default location for benchmark result files. Mirrors the standalone
+/// gyroflow-core `gyroflow-bench` harness so both tools share storage and the
+/// same results are not committed to the repo.
+fn default_bench_dir() -> PathBuf {
+    let dir = gyroflow_plugin_base::gyroflow_core::settings::data_dir().join("benchmarks");
+    let _ = std::fs::create_dir_all(&dir);
+    dir
+}
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
     match cli.cmd {
         Cmd::Run(args) => cmd_run(args),
-        Cmd::Compare(args) => compare::compare(&args.baseline, &args.candidate, &args.dir, args.threshold),
-        Cmd::List(args) => compare::list(&args.dir),
+        Cmd::Compare(args) => {
+            let dir = args.dir.unwrap_or_else(default_bench_dir);
+            compare::compare(&args.baseline, &args.candidate, &dir, args.threshold)
+        }
+        Cmd::List(args) => {
+            let dir = args.dir.unwrap_or_else(default_bench_dir);
+            compare::list(&dir)
+        }
     }
 }
 
 fn cmd_run(args: cli::RunArgs) -> Result<()> {
+    let output_dir = args.output.clone().unwrap_or_else(default_bench_dir);
+    std::fs::create_dir_all(&output_dir)?;
+    let out_path = output_dir.join(format!("{}.bench.json", sanitize(&args.name)));
+    if out_path.exists() {
+        return Err(anyhow!(
+            "Run '{}' already exists at {}. Choose a different --name or delete the file.",
+            args.name, out_path.display()
+        ));
+    }
+
     let repo_root = sysinfo::repo_root();
     let host = sysinfo::collect_host();
     let git = sysinfo::collect_git(&repo_root);
@@ -29,6 +55,7 @@ fn cmd_run(args: cli::RunArgs) -> Result<()> {
         None => "synthetic".to_string(),
     };
 
+    println!("name:    {}", args.name);
     println!("host:    {} ({} {}, {} cores) — {}", host.hostname, host.os, host.arch, host.cpu_cores, host.cpu_model);
     println!("plugin:  {}", git.plugin_rev);
     println!("core:    {}", git.core_rev);
@@ -60,23 +87,18 @@ fn cmd_run(args: cli::RunArgs) -> Result<()> {
     let result = BenchResult {
         schema_version: SCHEMA_VERSION,
         timestamp: now.to_rfc3339(),
-        label: args.label.clone(),
+        name: args.name.clone(),
         host,
         git,
         config,
         cells,
     };
 
-    std::fs::create_dir_all(&args.output)?;
-    let short_rev = result.git.plugin_rev.chars().take(7).collect::<String>();
-    let label_part = if args.label.is_empty() { "".into() } else { format!("_{}", sanitize(&args.label)) };
-    let filename = format!("{}_{}{}.json", now.format("%Y%m%dT%H%M%SZ"), short_rev, label_part);
-    let out_path = args.output.join(filename);
     std::fs::write(&out_path, serde_json::to_string_pretty(&result)?)?;
     println!("\nwrote {}", out_path.display());
     Ok(())
 }
 
 fn sanitize(s: &str) -> String {
-    s.chars().map(|c| if c.is_ascii_alphanumeric() || c == '-' { c } else { '_' }).collect()
+    s.chars().map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' }).collect()
 }

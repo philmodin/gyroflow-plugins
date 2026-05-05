@@ -54,9 +54,17 @@ pub fn resolve_pixel_formats(args: &[PixelFormatArg]) -> Vec<PixelFormat> {
 }
 
 pub fn resolve_backends(args: &[BackendArg]) -> Vec<Backend> {
-    let want_all = args.iter().any(|a| matches!(a, BackendArg::All));
     let mut out = Vec::new();
     let push = |b: Backend, out: &mut Vec<Backend>| { if !out.contains(&b) { out.push(b); } };
+    // Default (no --backend given): GPU backends only. CPU is the slow path and is
+    // skipped unless the user explicitly asks for it (`--backend cpu` or `--backend all`).
+    if args.is_empty() {
+        #[cfg(any(target_os = "macos", target_os = "ios"))] push(Backend::Metal, &mut out);
+        push(Backend::Opencl, &mut out);
+        #[cfg(any(target_os = "windows", target_os = "linux"))] push(Backend::Cuda, &mut out);
+        return out;
+    }
+    let want_all = args.iter().any(|a| matches!(a, BackendArg::All));
     if want_all {
         push(Backend::Cpu, &mut out);
         #[cfg(any(target_os = "macos", target_os = "ios"))] push(Backend::Metal, &mut out);
@@ -206,10 +214,17 @@ pub struct EffectiveConfig {
 pub fn resolve_config(args: &RunArgs) -> Result<EffectiveConfig> {
     // Build a throwaway manager just to read the project's recorded shape,
     // so we can pick frame counts / sizes before the real per-cell rebuilds.
-    let size_override = match (args.width, args.height) {
-        (Some(w), Some(h)) => Some((w, h)),
-        (None, None) => None,
-        _ => return Err(anyhow!("--width and --height must be set together")),
+    let size_override = match args.resolution.as_deref() {
+        None => None,
+        Some(s) => {
+            let parts: Vec<&str> = s.split(|c| c == 'x' || c == 'X').collect();
+            if parts.len() != 2 {
+                return Err(anyhow!("--resolution expects WxH (e.g. 3840x2160), got '{s}'"));
+            }
+            let w = parts[0].parse::<usize>().map_err(|_| anyhow!("invalid width in --resolution: {}", parts[0]))?;
+            let h = parts[1].parse::<usize>().map_err(|_| anyhow!("invalid height in --resolution: {}", parts[1]))?;
+            Some((w, h))
+        }
     };
     let probe = build_manager(&args.project, size_override)?;
     let shape = read_shape(&probe);
