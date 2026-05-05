@@ -1,0 +1,7 @@
+[workspace]
+members = ["common", "bench"]
+exclude = ["openfx", "frei0r", "adobe"]
+resolver = "2"
+
+[profile.release]
+debug = 1
