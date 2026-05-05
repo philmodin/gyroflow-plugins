@@ -33,6 +33,8 @@ pub struct RunConfig {
     pub project: String,
     pub input_size: [usize; 2],
     pub output_size: [usize; 2],
+    pub fps: f64,
+    pub project_frame_count: usize,
     pub frames: usize,
     pub warmup: usize,
     pub iterations: usize,

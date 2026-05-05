@@ -75,6 +75,8 @@ fn cmd_run(args: cli::RunArgs) -> Result<()> {
         project: args.project.display().to_string(),
         input_size: [in_w, in_h],
         output_size: [out_w, out_h],
+        fps: eff.fps,
+        project_frame_count: eff.project_frame_count,
         frames: eff.frames,
         warmup: eff.warmup,
         iterations: eff.iterations,

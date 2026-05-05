@@ -206,6 +206,7 @@ pub struct EffectiveConfig {
     pub input_size: (usize, usize),
     pub output_size: (usize, usize),
     pub frames: usize,
+    pub project_frame_count: usize,
     pub warmup: usize,
     pub iterations: usize,
     pub fps: f64,
@@ -230,12 +231,14 @@ pub fn resolve_config(args: &RunArgs) -> Result<EffectiveConfig> {
     let shape = read_shape(&probe);
     drop(probe);
 
-    let frames = args.frames.unwrap_or(shape.frame_count.max(1));
+    let project_frame_count = shape.frame_count.max(1);
+    let frames = args.frames.unwrap_or(project_frame_count);
     Ok(EffectiveConfig {
         size_override,
         input_size: shape.input_size,
         output_size: shape.output_size,
         frames,
+        project_frame_count,
         warmup: args.warmup,
         iterations: args.iterations,
         fps: shape.fps,
